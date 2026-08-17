@@ -97,14 +97,15 @@ $HOME/.agents/skills/anlogic-td-validation
 
 也可以使用 Skill 安装机制从这个 GitHub 仓库安装。
 
-需要显式指定时，可以调用：
+日常使用时直接描述工程任务即可，由 Codex 根据 `SKILL.md` 顶部的 `name` 和 `description` 自动判断是否使用对应 Skill。
+
+需要显式要求时，可以直接在 prompt 中写明 Skill 名称，例如：
 
 ```text
-$ccs-c2000-debug
-$anlogic-td-validation
-```
+使用 ccs-c2000-debug skill，修改这个 F28335 工程后进行 RAM-only 下板验证。
 
-也可以直接描述工程任务，由 Codex 根据 `SKILL.md` 顶部的 `name` 和 `description` 自动判断是否使用。
+使用 anlogic-td-validation skill，检查这个安陆 TD 工程的 PLL 时钟约束和最终时序。
+```
 
 ## 原始经验文档
 
