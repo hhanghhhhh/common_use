@@ -1,10 +1,10 @@
-# CCS/XDS troubleshooting
+# CCS / XDS 排障参考
 
-Use this reference when build/load/debug execution fails or tool status is ambiguous.
+当编译、下载、调试执行失败，或者工具状态不明确时读取本文件。
 
-## Check probe ownership first
+## 先检查仿真器是否被占用
 
-Before diagnosing drivers or hardware, look for processes that can own the debug probe:
+在怀疑驱动或硬件前，先检查可能占用 debug probe 的进程：
 
 ```powershell
 Get-Process | Where-Object {
@@ -12,27 +12,27 @@ Get-Process | Where-Object {
 } | Select-Object ProcessName,Id,Path
 ```
 
-An active CCS GUI debug session can exclusively own the XDS100 JTAG channel.
+CCS GUI 的活动 debug session 可能独占 XDS100 JTAG 通道。
 
-Do not force-kill `ccstudio.exe` if the user may have unsaved work. Prefer ending the debug session/closing CCS normally, or report the owning process.
+如果用户可能有未保存内容，不要强杀 `ccstudio.exe`。优先正常结束 debug session / 关闭 CCS，或者明确告诉用户哪个进程正在占用 probe。
 
-## Confirm XDS100 visibility
+## 确认 XDS100 是否可见
 
-Use TI's tool:
+使用 TI 自带工具：
 
 ```powershell
 & 'D:\04-software\CCSv720\ccsv7\ccs_base\common\uscif\xds100serial.exe'
 ```
 
-If it reports no emulator:
+如果提示没有 emulator，按以下顺序排查：
 
-1. release CCS/other debug ownership
-2. rerun `xds100serial.exe`
-3. inspect Windows device enumeration
-4. inspect driver binding
-5. check USB cable, target power, probe EEPROM/hardware only after the simpler causes
+1. 释放 CCS 或其他调试工具对 probe 的占用。
+2. 再运行一次 `xds100serial.exe`。
+3. 检查 Windows 设备枚举。
+4. 检查驱动绑定。
+5. 最后再考虑 USB 线、目标供电、probe EEPROM 或硬件故障。
 
-Useful Windows checks:
+Windows 检查命令：
 
 ```powershell
 pnputil /enum-devices /connected | Select-String -Pattern 'XDS|FTDI|VID_0403' -Context 2,4
@@ -41,73 +41,73 @@ pnputil /enum-drivers | Select-String -Pattern 'xds100|ftdi|Texas Instruments' -
 
 ## `Error -151` / `SC_ERR_FTDI_OPEN`
 
-Typical text:
+典型信息：
 
 ```text
 One of the FTDI driver functions used during the connect returned bad status or an error.
 ```
 
-Diagnose in this order:
+推荐排查顺序：
 
-1. CCS GUI or another process already owns the probe
-2. invalid probe serial-number configuration
-3. FTDI/XDS100 driver issue
-4. EEPROM configuration issue
-5. USB cable/target power/probe hardware
+1. CCS GUI / 其他进程占用 probe。
+2. probe serial-number 配置错误。
+3. FTDI / XDS100 驱动问题。
+4. EEPROM 配置问题。
+5. USB 线、目标供电、probe 硬件问题。
 
-Do not jump straight to reinstalling drivers.
+不要一看到 `-151` 就直接重装驱动。
 
-## Connect succeeds but load waits for `main` and times out
+## 连接成功，但 load 后等待 `main` 超时
 
-When program load implicitly restarts the target, CCS can try to run automatically to a label that the custom startup path does not reach quickly enough.
+程序装载会 restart target，CCS 可能自动 run 到一个自定义 startup 无法及时到达的 label。
 
-Before `loadProgram()` use:
+在 `loadProgram()` 前设置：
 
 ```javascript
 session.options.setBoolean("AutoRunToLabelOnRestart", false);
 ```
 
-If the timeout reports possible leftover breakpoint opcodes, reload/verify the program on the next attempt rather than assuming the previous image is valid.
+如果超时信息提示可能残留 breakpoint opcode，下一次应重新 load / verify，不要假定上一次镜像完整有效。
 
-## Variable/expression read fails
+## 变量 / expression 读取失败
 
-Check:
+检查：
 
-- output contains debug symbols
-- variable was not optimized away
-- symbol spelling/scope/compiler prefix is correct
-- symbol file matches the image currently running
-- the memory region supports live access if reading while running
-- the type converts correctly through the DSS JavaScript layer
+- `.out` 是否包含 debug symbols。
+- 变量是否被优化掉。
+- symbol 名称、作用域、compiler 前缀是否正确。
+- 当前加载的 symbol 是否与 target 正在运行的程序匹配。
+- 运行中读取时，对应 memory 是否支持 live access。
+- 变量类型是否能正确经过 DSS JavaScript 层转换。
 
-Use the map to confirm a symbol when useful:
+需要时用 map 查 symbol：
 
 ```powershell
 Select-String -Path '<MAP_FILE>' -Pattern '<VARIABLE>'
 ```
 
-If live expression access is unsupported, halt the target, read, then resume according to the task.
+如果 live expression 不支持，则按任务需要执行 halt → read → resume。
 
-## `TI_APPDATA_DIR` / permission errors
+## `TI_APPDATA_DIR` / 权限错误
 
-Restricted environments can make TI tools emit an access error while the outer launcher remains misleadingly successful.
+受限环境中，TI 工具可能发生权限错误，但外层 launcher 状态仍具有误导性。
 
-Set:
+设置：
 
 ```powershell
 $env:TI_APPDATA_DIR = '<WRITABLE_DIR>\ti-appdata'
 New-Item -ItemType Directory -Force -Path $env:TI_APPDATA_DIR | Out-Null
 ```
 
-Then rerun the same narrowly scoped DSS command.
+然后重试同一个最小范围 DSS 命令。
 
-## Do not trust `dss.bat` exit code alone
+## 不能只相信 `dss.bat` 退出码
 
-On the verified CCS 7.2 setup, a JavaScript failure or `System.exit(1)` can still leave the outer PowerShell seeing process exit code `0`.
+在已经验证的 CCS 7.2 环境中，JavaScript 内部失败或执行 `System.exit(1)` 后，外层 PowerShell 仍可能看到 exit code `0`。
 
-Capture output and require an explicit success marker.
+因此必须捕获输出并要求明确 PASS 标记。
 
-Correct PowerShell pattern:
+正确形式：
 
 ```powershell
 $dssText = $dssOutput -join [Environment]::NewLine
@@ -116,48 +116,62 @@ if ($dssText -notmatch '\[CCS-DSS\] PASS:') {
 }
 ```
 
-Avoid:
+避免直接：
 
 ```powershell
 if ($dssOutput -notmatch 'PASS') { ... }
 ```
 
-because `$dssOutput` is an array and PowerShell's array `-notmatch` behavior can produce false failure logic even when one line contains PASS.
+因为 `$dssOutput` 是数组，PowerShell 对数组执行 `-notmatch` 时可能在明明存在 PASS 行的情况下仍产生错误判断。
 
-## Cold-start evidence can lag
+## 冷启动后验证变量可能暂时不变化
 
-Immediately after load/reset, clock, peripheral, section-copy, and interrupt initialization can delay the validation variable.
+程序刚 load/reset 后还要执行时钟、外设、section copy、中断等初始化，验证变量可能暂时保持初值。
 
-Use a finite retry window instead of declaring failure after the first sample:
+不要只采样一次就判 FAIL。
 
-- start around 1000 ms when no better task-specific interval is known
-- sample a bounded number of times
-- keep an overall timeout
-- only call PASS when the variable/event behaves according to its actual semantics
+没有更合适的任务参数时，可以：
 
-## RAM-only image unexpectedly programs Flash
+- 从约 1000 ms 间隔开始。
+- 有限次数重试。
+- 设置总 timeout。
+- 只有符合变量/事件真实语义时才判 PASS。
 
-The executable probably still contains Flash load addresses.
+## RAM-only 镜像意外触发 Flash programming
 
-Inspect its map. A filename containing `ram` proves nothing.
+大概率是 executable 仍包含 Flash LOAD 地址。
 
-For the verified F28335 flow, check whether loadable `.text/.cinit/.econst/...` sections still land in `0x300000-0x33FFFF`. Fix the RAM linker command/object set before trying again.
+检查 map；文件名中出现 `ram` 没有证明力。
 
-## Linker cannot find RTS / `_c_int00`
+F28335 参考流程中，需要确认 `.text/.cinit/.econst/...` 等真正可装载 section 没有落在主要 Flash 范围 `0x300000-0x33FFFF`。
 
-Errors such as:
+发现后应修正 RAM linker cmd / object set，而不是继续下载。
+
+## Linker 找不到 RTS / `_c_int00`
+
+例如：
 
 ```text
 cannot find file "rts2800_fpu32.lib"
 undefined symbol _c_int00
 ```
 
-usually mean the correct RTS library/search path is missing or appears too late in the link options.
+通常说明：
 
-Use an absolute RTS path when practical and ensure linker mode/options are ordered correctly.
+- 正确 RTS library 缺失。
+- library search path 缺失。
+- options 顺序错误。
 
-## Cleanup failures / probe remains busy
+实际可行时优先使用 RTS 绝对路径，并确认 linker mode/options 顺序正确。
 
-Use `try/finally` to disconnect, terminate the session, and stop the server even after an exception.
+## Cleanup 失败 / probe 下一次仍 busy
 
-A stale DSS process/session can make the next probe attempt look like a fresh hardware problem. Check for leftover CCS/DSS processes before escalating diagnostics.
+所有 DSS 路径都应使用 `try/finally` 保证：
+
+- disconnect
+- terminate session
+- stop server
+
+异常后残留的 DSS/CCS session 会让下一次连接看起来像新的硬件故障。
+
+升级到驱动/硬件排查前，先检查是否存在残留 CCS/DSS 进程。
