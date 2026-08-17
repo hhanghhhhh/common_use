@@ -97,18 +97,37 @@ connect → load → run/sample → PASS/FAIL → cleanup
     '<STATE_EXPR>' <PASS_STATE> <FAIL_STATE> `
     '<PASS_FLAG_EXPR>' '<ERROR_EXPR>' `
     '<PROGRESS_EXPR_OR_DASH>' <EXPECTED_PROGRESS> `
-    [sample_ms] [timeout_ms]
+    [sample_ms] [timeout_ms] [startup_grace_samples]
 ```
 
-不检查 progress 时传 `- 0`。脚本循环执行：
+不检查 progress 时传 `- 0`。
+
+可选参数默认值：
 
 ```text
-runAsynch → 等待 → halt → 读取 state/pass/error/progress → 未到终态则继续
+sample_ms             = 500
+ timeout_ms            = 10000
+startup_grace_samples = 1
 ```
+
+`startup_grace_samples` 用来处理“状态变量上电默认值恰好等于 FAIL_STATE”的情况：
+
+- grace 期间如果已经达到 `PASS_STATE`，仍立即按 pass flag / error / progress 判定 PASS。
+- grace 期间只忽略 `FAIL_STATE`，不忽略其他异常。
+- grace 结束后再次看到 `FAIL_STATE`，立即判 FAIL。
+- 明确希望首次采样即可判 FAIL 时传 `0`。
+
+脚本循环执行：
+
+```text
+runAsynch → 等待 → halt → 读取 state/pass/error/progress → 判断终态 → 未到终态则继续
+```
+
+所有参与判定的 expression 都必须能转换为有限数值。返回空值、`NaN`、无穷值或其他不可转换结果时，脚本应输出明确 `[CCS-DSS] ERROR:`，而不是把类型/符号问题伪装成“状态机超时”。
 
 这种一致快照适合低频业务状态机，会短暂扰动目标；高实时性控制环应改用运行中实时访问、trace 或应用侧 sticky evidence。
 
-已在 CCS 7.2 + XDS100V3 + F28335 RAM-only 联调中验证：首次快照可能仍为启动默认值；只有 PASS state、pass flag=1、error=0 和可选 progress 匹配时才输出 PASS。
+原状态机 run/halt 一致快照流程已在 CCS 7.2 + XDS100V3 + F28335 RAM-only 联调中验证。`startup_grace_samples` 和非数值 expression 防护是在此基础上增加的通用保护；下次在真实工程使用新版脚本时，应顺带确认日志中的 `STARTUP_GRACE`、`SAMPLE` 和最终 PASS/FAIL 行符合预期，再把该行为视为当前环境的已验证事实。
 
 ## 交互式调试
 
