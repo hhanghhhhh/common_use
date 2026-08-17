@@ -31,8 +31,8 @@ try {
     server = env.getServer("DebugServer.1");
     server.setConfig(ccxml);
 
-    // Verified default for a ccxml that exposes exactly one target.
-    // Multi-core targets need an explicit, project-specific session selection.
+    // 已验证：当 ccxml 只暴露一个目标时，优先使用无参数 openSession()。
+    // 多核目标必须根据当前工程显式选择正确 session。
     session = server.openSession();
     session.target.connect();
 
