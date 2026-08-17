@@ -73,7 +73,16 @@ derive_clocks
 
 最终 clock/timing report 必须出现预期 generated clock 频率。真实工作 domain 未约束时，即使 WNS 为正也不能判 PASS。
 
-PLL lock 释放 reset 推荐“异步置位、generated clock 域同步释放”。需要 MTBF 时，除 RTL async-reg 意图外，还要确认当前版本对应的 synthesis/place async-reg 设置确实启用。
+PLL lock 释放 reset 推荐“异步置位、generated clock 域同步释放”。需要 MTBF 时，除 RTL async-reg 意图外，还要确认 synthesis/place 对异步同步寄存器的处理确实启用。
+
+TD 2026.1 SP2 已验证可使用：
+
+```tcl
+set_param rtl directive:async_reg on
+set_param place async_reg on
+```
+
+这两条命令属于 **2026.1 SP2 已验证写法**，用于让 synthesis/place 正确认识同步链并支持相应 MTBF 分析；不要默认认为其他 TD release 的参数名和语义完全相同。版本变化时先从当前版本帮助、generated run Tcl 或实际 log 中重新确认，再决定是否沿用。
 
 ## 命令行实现
 
