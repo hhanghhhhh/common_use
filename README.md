@@ -1,6 +1,6 @@
 # common_use
 
-个人可复用的 Agent/Codex 工作流。
+个人可复用的 Agent / Codex 工作流与 Skill。
 
 ## Skills
 
@@ -27,50 +27,92 @@ skills/
         └── program_fpga.tcl
 ```
 
-`skills/temp/` 暂时保留最初的两份大 Markdown，方便对比 Skill 化前后的结构。
+`skills/temp/` 暂时保留最初的两份大 Markdown，方便直接对比 Skill 化前后的结构和内容。
 
-## Skill 设计
+Skill 文档统一使用中文，命令、API 名称和常用工程术语保留原英文名称，方便人工审阅的同时避免技术含义发生变化。
 
-`SKILL.md` 只放：
+## Skill 的分层设计
 
-- 什么时候触发
-- 输入需要确认什么
-- Agent 的决策/执行流程
+### `SKILL.md`
+
+只负责 Agent 的核心行为：
+
+- 什么任务应该触发这个 Skill
+- 开始前需要确认哪些输入
+- 如何选择工作模式
+- Agent 按什么顺序执行
 - 哪些规则不能违反
-- 什么才算 PASS
-- 什么时候继续读取哪个 reference
+- 什么条件下才能报告 PASS
+- 当前分支需要继续读取哪个 reference
+- 最终应该输出哪些证据
 
-详细工具知识和踩坑记录放在 `references/`，只有当前任务需要时才读。
+### `references/`
 
-已经验证、适合稳定复用的确定性操作可以放在 `scripts/`，避免 Agent 每次重新生成同一段脚本。
+保存详细工具知识、已经验证的工程经验和踩坑记录。
+
+Agent 只有在当前任务进入对应分支时才需要读取，因此不会像原来的大 Markdown 一样每次把所有细节一起加载。
+
+### `scripts/`
+
+保存已经验证、适合稳定复用的确定性操作，避免 Agent 每次重新生成同一段脚本。
+
+脚本的机器可解析输出继续使用稳定的英文 key / `PASS` / `FAIL`，方便自动判断；注释使用中文。
+
+## 两个 Skill 的职责
+
+### `ccs-c2000-debug`
+
+用于 TI C2000 / F28335 的：
+
+- CCS 工程编译
+- RAM-only 快速下板
+- Flash 验证
+- DSS 下载和运行变量读取
+- 断点 / 单步 / 调用栈调试
+- XDS100 / XDS110 / JTAG 排障
+
+### `anlogic-td-validation`
+
+用于安陆 FPGA / TD 的：
+
+- synthesis
+- place & route
+- SDC / PLL generated clock 检查
+- WNS / TNS / setup / hold 时序验证
+- resource / DRC / report
+- bitgen
+- AL-Link SRAM 下载
+- ChipWatcher / 下板运行验证
 
 ## Codex 本地使用
 
-Codex 的本地 Skill discovery 目录是 `.agents/skills`（仓库级）或 `$HOME/.agents/skills`（用户级）。这个仓库作为 Skill 源仓库使用时，可以把对应 Skill 目录复制或 symlink 到用户级目录，例如：
+Codex 的本地 Skill discovery 目录可使用 `.agents/skills`（仓库级）或 `$HOME/.agents/skills`（用户级）。
+
+这个仓库作为 Skill 源仓库时，可以把对应 Skill 目录复制或 symlink 到用户级目录，例如：
 
 ```text
 $HOME/.agents/skills/ccs-c2000-debug
 $HOME/.agents/skills/anlogic-td-validation
 ```
 
-也可以让 Codex 的 `$skill-installer` 从这个 GitHub 仓库安装。
+也可以使用 Skill 安装机制从这个 GitHub 仓库安装。
 
-Codex CLI / IDE extension 中可以显式调用：
+需要显式指定时，可以调用：
 
 ```text
 $ccs-c2000-debug
 $anlogic-td-validation
 ```
 
-也可以直接描述任务，让 Codex 根据 `SKILL.md` 顶部的 `description` 自动匹配。
+也可以直接描述工程任务，由 Codex 根据 `SKILL.md` 顶部的 `name` 和 `description` 自动判断是否使用。
 
-## Source guides
+## 原始经验文档
 
-原始经验文档：
+原来的完整探索记录仍保留：
 
 ```text
 skills/temp/AI_AGENT_CCS28335_XDS100V3_VALIDATION_GUIDE.md
 skills/temp/AI_AGENT_TD_VALIDATION_GUIDE.md
 ```
 
-它们用于保留探索过程和完整历史；日常 Agent 执行优先使用整理后的 Skill。
+原始文档用于保留探索过程和完整历史；日常 Agent 执行优先使用整理后的 Skill。
