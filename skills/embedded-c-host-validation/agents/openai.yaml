@@ -1,0 +1,4 @@
+interface:
+  display_name: "Embedded C Host Validation"
+  short_description: "使用 GCC、Mock 与 Python 在主机侧验证嵌入式 C 逻辑"
+  default_prompt: "Use $embedded-c-host-validation to build an isolated host-side test harness for this embedded C module."

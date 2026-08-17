@@ -1,0 +1,4 @@
+interface:
+  display_name: "DSP–FPGA Bridge Debug"
+  short_description: "通过 DSP–FPGA 调试桥执行跨器件联合自动验证与故障定位"
+  default_prompt: "Use $dsp-fpga-bridge-debug to design and validate a layered DSP–XINTF–FPGA automated debug loop."

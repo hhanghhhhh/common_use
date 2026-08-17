@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cocotb RTL Validation"
+  short_description: "使用 Cocotb、Icarus 或 Questa 验证 RTL 与覆盖率"
+  default_prompt: "Use $cocotb-rtl-validation to create an isolated RTL regression and coverage workflow for this design."
