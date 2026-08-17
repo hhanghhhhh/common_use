@@ -1,10 +1,10 @@
-# Anlogic TD implementation reference
+# 安陆 TD 综合实现与时序参考
 
-Use this reference for synthesis, place/route, clock/timing validation, reports, and bitstream generation.
+当任务涉及 synthesis、place/route、时钟/时序验证、report 或 bitstream 生成时读取本文件。
 
-## Verified local installation
+## 已验证的本机安装
 
-Reference installation:
+参考安装：
 
 ```text
 D:\04-software\TD_2601_sp2
@@ -12,45 +12,51 @@ TD Release 2026.1 SP2
 build 6.2.2.200067
 ```
 
-Command-line executable:
+命令行工具：
 
 ```text
 D:\04-software\TD_2601_sp2\bin\td_commands_prompt.exe
 ```
 
-Reference license location:
+参考 license：
 
 ```text
 D:\04-software\TD_2601_sp2\license\Anlogic.lic
 ```
 
-Do not infer that a license is valid just because TD starts. Check the synthesis/tool log for successful license opening and license-related errors.
+不能因为 TD 能启动就认为 license 一定有效。必须从 synthesis/tool log 中确认 license 成功打开，并检查 license 相关 error。
 
-Treat these paths as workstation defaults, not as facts for every environment.
+这些路径只作为当前工作站默认值，不是所有环境的固定事实。
 
-## Known TD 2026.1 SP2 run-generation pitfalls
+## TD 2026.1 SP2 已知 run 生成问题
 
-### Bad generated executable name
+### 自动生成的 executable 名称错误
 
-In the reference setup, `launch_runs` generated a batch file containing:
+参考环境中，`launch_runs` 曾生成：
 
 ```text
 td_commands_prompt_commands_prompt.exe
 ```
 
-The reliable workaround was to execute each generated run Tcl directly with the real executable:
+可靠处理方式是直接使用真实 executable 执行各 run 生成的 Tcl：
 
 ```text
 D:\04-software\TD_2601_sp2\bin\td_commands_prompt.exe
 ```
 
-Prefer correcting/avoiding the broken wrapper rather than rebuilding the entire implementation flow from scratch.
+优先绕过/修正错误 wrapper，不要因此重新发明整套 implementation flow。
 
-### Empty device/package fields in generated settings
+### 自动生成 settings 的 device/package 为空
 
-Generated `settings.cfg` files were observed with empty device/package values. Resolve and verify the actual device database, package, and speed before implementation.
+曾观察到 generated `settings.cfg` 中 device/package 字段为空。
 
-Reference example only:
+执行实现前必须解析并确认实际：
+
+- device database
+- package
+- speed
+
+仅作为参考的示例：
 
 ```tcl
 set device_name ph1_400.db
@@ -58,31 +64,35 @@ set package_name PH1A400SFX900
 set speed 2
 ```
 
-The project-visible device/package string and the database passed to `import_device` are not necessarily identical. In the reference flow:
+工程界面中的 device/package 名称与 `import_device` 使用的 database 参数不一定相同。
+
+参考工程中：
 
 ```text
 project/package selection: PH1A400SFX900
 direct import database:    ph1_400.db
 ```
 
-Do not reuse those values for another project.
+不要把这些值复制到别的工程。
 
-### Physical run constraint lists
+### Physical run 的约束清单
 
-A physical run beginning around `opt_place` was observed to load additional ADC constraints through `bkaADCList`, not only `ADCList`.
+从 `opt_place` 附近开始的 physical run 曾通过 `bkaADCList` 加载附加 ADC constraint，而不只是 `ADCList`。
 
-Reference structure:
+参考结构：
 
 ```tcl
 set bkaADCList {"../../constraints/top.adc"}
 set SDCList {"../../constraints/top.sdc"}
 ```
 
-When pins or clocks appear missing in physical implementation despite being present in the project, inspect the generated run Tcl/settings to see which constraint lists are actually consumed.
+如果工程里明明有 pin/clock 约束，但 physical implementation 中却像没有加载，应直接检查 generated run Tcl/settings，确认实际消费的是哪些 constraint list。
 
-### Exit code can lie
+### Exit code 可能误导
 
-TD can return process exit code `0` after internal Tcl/tool errors. Always inspect the newest run log for:
+TD 在内部 Tcl/tool 报错后仍可能返回 process exit code `0`。
+
+每次都要检查最新 run log：
 
 ```text
 ERROR
@@ -90,21 +100,21 @@ CRITICAL-WARNING
 WARNING
 ```
 
-Also verify output timestamps so an old bit/report cannot be mistaken for a fresh successful run.
+同时检查输出时间戳，避免把旧 `.bit` / report 当成本次构建结果。
 
-## PLL/IP workflow
+## PLL / IP 工作流
 
-For the verified release, the dependable flow was:
+在已验证 TD 版本中，可靠流程是：
 
-1. Select the correct FPGA device in the TD project.
-2. Generate/configure the PLL with TD IP Generator.
-3. Preserve the generated `.ipc` and generated HDL wrapper under the generated IP directory.
-4. Add the `.ipc` to the project and include the intended generated HDL wrapper in synthesis.
-5. Do not compile both Verilog and VHDL versions of the same wrapper.
-6. Instantiate the generated wrapper instead of hand-editing primitive parameters for normal use.
-7. Regenerate the IP after changing device or requested input/output frequencies.
+1. 在 TD 工程中选择正确 FPGA device。
+2. 使用 TD IP Generator 配置/生成 PLL。
+3. 保留生成的 `.ipc` 和 HDL wrapper。
+4. 把 `.ipc` 加入工程，并确保实际需要的 HDL wrapper 进入 synthesis。
+5. 同一个 wrapper 不要同时编译 Verilog 和 VHDL 两个版本。
+6. 正常使用时实例化生成 wrapper，不要手工修改 primitive 参数。
+7. 修改 device 或输入/输出频率后重新生成 IP。
 
-Reference example only:
+仅作参考的已验证配置：
 
 ```text
 Device       : PH1A400SFX900
@@ -115,38 +125,47 @@ Primitive    : PH1_PHY_PLL
 Clock buffer : PH1_LOGIC_BUFG
 ```
 
-## Clock constraints
+## 时钟约束
 
-At minimum, constrain the primary input clock:
+至少先约束 primary input clock：
 
 ```tcl
 create_clock -name clk_in -period 20.000 -waveform {0.000 10.000} [get_ports {clk_in}]
 ```
 
-When PLL/clock-buffer IP creates clocks, derive the generated clocks using the release-supported flow:
+PLL / clock-buffer 产生新时钟时，使用当前版本支持的 generated-clock 推导机制：
 
 ```tcl
 derive_clocks
 ```
 
-Do not accept a positive WNS when the actual PLL output domain is not constrained. Confirm the final timing/clock report explicitly lists the generated clock's expected frequency/period.
+**如果真实 PLL 输出 domain 没有被约束，即使 WNS 为正也不能认为 timing 通过。**
 
-## Reset synchronization around PLL lock
+最终 clock/timing report 必须明确出现预期 generated clock 的频率和周期。
 
-For reset release from PLL lock, use asynchronous assertion and synchronous deassertion in the generated clock domain.
+## PLL lock 相关 Reset 同步
 
-When MTBF reporting is required, the reference flow needed TD's synthesis/place async-reg handling in addition to RTL intent:
+PLL lock 释放 reset 时，使用：
+
+```text
+异步置位
++ 在 generated clock domain 同步释放
+```
+
+需要 MTBF report 时，参考流程除了 RTL 中的 async-reg 意图外，还需要 TD synthesis/place 对应设置：
 
 ```tcl
 set_param rtl directive:async_reg on
 set_param place async_reg on
 ```
 
-Use the equivalent run properties in project multi-run mode. Verify against the current TD release instead of assuming every release uses identical parameter names.
+project multi-run 模式使用等价 run property。
 
-## Direct command-line implementation
+不同 TD release 可能参数名不同，应以当前版本为准。
 
-A reference project used this effective sequence:
+## 命令行直接执行实现
+
+参考工程的有效顺序：
 
 ```powershell
 Push-Location 'test1_Runs\syn_1'
@@ -160,15 +179,15 @@ Pop-Location
 & 'D:\04-software\TD_2601_sp2\bin\td_commands_prompt.exe' 'post_route_reports.tcl'
 ```
 
-Run generated Tcl from the working directory expected by its relative paths.
+generated Tcl 必须在它预期的工作目录执行，因为内部经常使用相对路径。
 
-If the project already has a working `build_td.ps1`, prefer using it and inspecting its behavior over generating another parallel build entrypoint.
+如果当前工程已经有可用 `build_td.ps1`，优先使用和检查现有脚本，不要再平行生成另一套 build entrypoint。
 
-## Final physical reports
+## 最终 Physical Report
 
-After place/route, import the final physical database and update final timing before generating evidence.
+place/route 后，导入最终 physical database，并先更新 final timing，再生成证据。
 
-Reference command set:
+参考命令集：
 
 ```tcl
 import_device <device_db> -package <package> -speed <speed>
@@ -184,33 +203,32 @@ report_route_status -fanout_stat -drc -file <reports>/route_status.rpt
 report_mtbf -file <reports>/mtbf.rpt
 ```
 
-Some report commands may create no file when there is nothing to report. Use console/log output together with file existence/content.
+某些 report 在没有内容可输出时可能不生成空文件，因此要结合 console/log 判断。
 
-## Implementation acceptance checks
+## Implementation PASS 判据
 
-Do not report PASS until all applicable items hold:
+只有当前任务适用项全部满足才能报告 PASS：
 
-- authoritative RTL and intended top were used
-- source/include lists are complete
-- expected hard IP appears in elaboration/resource evidence
-- synthesis completed
-- place and route completed
-- no open/unrouted nets remain
-- no blocking DRC errors remain
-- every used clock domain is constrained
-- generated PLL/clock-buffer clocks appear in the final clock/timing report
-- setup WNS >= 0
-- setup TNS = 0 and setup failing endpoints = 0
-- hold WNS >= 0
-- hold failing endpoints = 0
-- resource counts are plausible and required logic was not optimized away
-- bitgen completed when requested
-- bitstream is fresh for this run
-- errors/critical warnings/warnings were reviewed and classified
+- 使用权威 RTL 和预期 top。
+- source/include list 完整。
+- 预期 hard IP 出现在 elaboration/resource 证据中。
+- synthesis 完成。
+- place & route 完成。
+- 没有 open/unrouted net。
+- 没有 blocking DRC error。
+- 每个实际使用的 clock domain 都有约束。
+- PLL/clock-buffer generated clock 出现在最终 clock/timing report。
+- setup WNS >= 0。
+- setup TNS = 0，setup failing endpoints = 0。
+- hold WNS >= 0，hold failing endpoints = 0。
+- 资源数量合理，关键逻辑没有被意外优化掉。
+- 用户要求时 bitgen 完成。
+- bitstream 为本次新生成。
+- ERROR / CRITICAL-WARNING / WARNING 已检查和分类。
 
-## Reference run evidence
+## 已验证参考结果
 
-A known-good reference run produced:
+一次已知正常 reference run：
 
 ```text
 PLL output clock : 100.000 MHz / 10.000 ns
@@ -225,15 +243,17 @@ GCLK             : 1
 Bitgen            : PASS
 ```
 
-One non-blocking warning remained:
+当时还存在一个 non-blocking warning：
 
 ```text
 PHY-5016 WARNING: PLL clkc is driving an IO without location.
 ```
 
-That reference design still placed the PLL, used a GCLK, routed successfully, passed final timing, and generated a bitstream. Record and classify such a warning in another project; do not automatically waive it just because it was non-blocking once.
+该参考设计最终 PLL 正常放置、使用 GCLK、route 完成、final timing 通过、bitgen 成功。
 
-Reference project artifacts included:
+这个结果只说明那次 warning 在那个工程中不阻塞，**不能把它自动豁免到其他工程。**
+
+参考工程产物：
 
 ```text
 VALIDATION_REPORT.md
@@ -245,4 +265,4 @@ reports/area.rpt
 test1_Runs/phy_1/test1.bit
 ```
 
-These filenames demonstrate a working evidence layout only; resolve the active project's actual paths.
+这些文件名只是展示一种已经跑通的 evidence layout；实际执行时仍应解析当前工程的真实路径。
