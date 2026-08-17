@@ -1,28 +1,28 @@
-# Anlogic TD SRAM programming and runtime debug
+# 安陆 TD SRAM 下载与运行时调试参考
 
-Use this reference after implementation when the task is to load a volatile bitstream over JTAG or inspect the running FPGA with ChipWatcher or another observability path.
+当 implementation 已经完成，并且任务需要通过 JTAG 把易失 bitstream 下载到 FPGA SRAM，或者使用 ChipWatcher/其他观察路径检查真实 FPGA 运行状态时读取本文件。
 
-## SRAM programming scope
+## SRAM programming 的范围
 
-This flow programs FPGA configuration SRAM only.
+这里的流程只写 FPGA configuration SRAM。
 
-It does not program external configuration Flash. The loaded design disappears after power-off unless the board boots a persistent image from another device.
+它**不会**烧录外部 configuration Flash。断电后当前 SRAM 配置会消失，除非板卡还能从其他持久化器件重新启动。
 
-Do not call a successful JTAG download proof that the application logic is functionally correct.
+JTAG 下载成功只能证明配置传输完成，不能证明应用逻辑功能正确。
 
-## Identify the cable before choosing a connection mode
+## 先识别 cable，再选择连接模式
 
-Do not treat every Anlogic cable as interchangeable.
+不同安陆 cable 不能混为一谈。
 
-Reference cases:
+参考情况：
 
-- Legacy `Anlogic AL-Link`: often enumerates with USB VID/PID `336C:1001` and the `ANLOCYUSB` driver. TD can access this directly using a numeric `-cable` index.
-- `AL-LINK-FT`: normally appears as FTDI channels with VID/PID `0403:6042`, commonly using WinUSB for the JTAG channel and TD's HwServer mode.
-- USB-Blaster-compatible or remote cable: can require a separately configured server/protocol.
+- Legacy `Anlogic AL-Link`：常见 USB VID/PID `336C:1001`，驱动 `ANLOCYUSB`。TD 可以用数字 `-cable` index 直接访问。
+- `AL-LINK-FT`：通常表现为 VID/PID `0403:6042` 的 FTDI channel，JTAG channel 常使用 WinUSB，并通过 TD HwServer 模式工作。
+- USB-Blaster 兼容或 remote cable：可能需要独立 server / protocol 配置。
 
-An open TCP port does not prove TD is speaking the expected hardware-server protocol.
+TCP 端口处于 listen 状态，并不能证明 TD 与服务端使用的是正确 hardware-server protocol。
 
-Useful Windows discovery:
+Windows 下可以先检查：
 
 ```powershell
 Get-PnpDevice -PresentOnly |
@@ -32,48 +32,48 @@ Get-PnpDevice -PresentOnly |
     Select-Object Status, Class, FriendlyName, InstanceId
 ```
 
-If Windows sees the cable but TD does not, inspect:
+如果 Windows 看得到 cable，但 TD 看不到，优先检查：
 
-- driver/service/provider binding
-- board power
+- driver / service / provider binding
+- 板卡供电
 - JTAG VREF
-- cable orientation
-- another process owning the cable
-- whether the selected TD cable/server mode matches the actual hardware
+- 排线方向
+- 是否被其他进程占用
+- 当前 TD cable/server mode 是否与真实硬件匹配
 
-Do this before changing the FPGA project.
+这些检查完成前，不要先去修改 FPGA 工程。
 
-## Select the correct bitstream
+## 选择正确 bitstream
 
-Use a bitstream that matches the exact intended runtime configuration.
+必须使用与当前预期 runtime configuration 完全匹配的 bitstream。
 
-### Normal implementation
+### 普通 implementation
 
-Use the final physical-run `.bit` produced after the current source/constraint changes.
+使用当前源码和约束完成最终 physical run 后生成的 `.bit`。
 
 ### ChipWatcher
 
-Use the ChipWatcher-generated/exported debug `.bit` together with the `.cwc` metadata from the same debug build.
+必须使用 ChipWatcher 同一次 debug build 生成/导出的 debug `.bit` 与对应 `.cwc`。
 
-A common debug output path is similar to:
+常见 debug 输出类似：
 
 ```text
 cw/compiled.bit
 ```
 
-Do not program a pre-ChipWatcher bitstream and expect a newer/different `.cwc` capture configuration to work.
+不能下载一个 pre-ChipWatcher bitstream，却期望另一份/更新后的 `.cwc` 正常工作。
 
-Before programming, verify:
+下载前确认：
 
-- file exists
-- file belongs to the active run/debug build
-- timestamp is newer than the source/debug changes being tested
-- hash when traceability matters
-- board pin constraints are valid for the real hardware
+- 文件存在
+- 属于当前 active run/debug build
+- 时间戳晚于本次源码/debug 修改
+- 需要追溯时记录 hash
+- 当前 pin constraint 对真实板卡有效且安全
 
-## Legacy AL-Link direct download pattern
+## Legacy AL-Link 直接下载
 
-For a legacy AL-Link using cable index `0`, the verified TD 2026.1 SP2 pattern was:
+Legacy AL-Link 使用 cable index `0` 时，TD 2026.1 SP2 已验证的基本形式：
 
 ```tcl
 set bit_file {D:/absolute/path/to/final_or_debug.bit}
@@ -102,33 +102,31 @@ if {$rc != 0} {
 exit
 ```
 
-Run with:
+执行：
 
 ```powershell
 & '<TD_INSTALL>\bin\td_commands_prompt.exe' 'program_fpga.tcl'
 ```
 
-The bundled `../scripts/program_fpga.tcl` parameterizes the bit path, cable index, and JTAG speed for this direct legacy AL-Link mode.
+Skill 内的 `../scripts/program_fpga.tcl` 已把 bit path、cable index 和 JTAG speed 参数化，用于这种 direct legacy AL-Link 模式。
 
-Use forward slashes or Tcl-braced paths inside Tcl when practical.
+Tcl 路径优先使用 `/` 或 `{}` 包裹，并尽量使用 bit 文件绝对路径，避免调用者当前工作目录不同造成歧义。
 
-Keep the bit path absolute to avoid caller-working-directory ambiguity.
+## JTAG 速度与 chain 参数
 
-## JTAG speed and chain parameters
-
-The verified example used:
+已验证示例：
 
 ```text
 -spd 5
 ```
 
-which requests a 5 MHz JTAG clock.
+表示请求 5 MHz JTAG clock。
 
-Start conservatively if cable length/signal integrity is uncertain. Valid speeds are cable/device dependent.
+排线较长或 signal integrity 不确定时，从保守速度开始。有效速度范围与 cable/device 有关。
 
-Do not guess a nonzero cable index. Use the index TD reports for the intended cable.
+不要猜非零 cable index，应使用 TD 实际枚举出的目标 cable index。
 
-For a daisy-chain, verify and pass the appropriate chain/device options such as:
+存在 JTAG daisy-chain 时，还需要按真实链路确认：
 
 ```text
 -total_dev
@@ -136,95 +134,112 @@ For a daisy-chain, verify and pass the appropriate chain/device options such as:
 -bypass
 ```
 
-Do not assume a one-device chain when hardware says otherwise.
+不要默认链上只有一个器件。
 
-## Sandbox/hardware access
+## Sandbox 与真实硬件访问
 
-A filesystem build can succeed inside an agent sandbox while USB/JTAG access fails because the sandbox cannot see the interactive user's device/driver/HwServer environment.
+Agent 在 filesystem sandbox 中可能可以正常综合，但无法访问 USB/JTAG，因为 sandbox 看不到交互用户的 device/driver/HwServer 环境。
 
-When the same narrow TD programming command works outside the sandbox, request/perform only the minimum hardware-access escalation needed for that command.
+如果同一条最小 TD 下载命令在 sandbox 外可用，只提升这条命令所需的最小硬件访问权限。
 
-Do not broaden permission to an arbitrary shell just because JTAG needs host USB access.
+不要因为 JTAG 需要 USB 权限就把任意 shell 全面放开。
 
-Run TD as the interactive user when possible; service/sandbox identities can see a different device/driver environment.
+可能时让 TD 以当前交互用户运行，因为 service/sandbox identity 看到的 device/driver 环境可能不同。
 
-## Programming success criteria
+## SRAM 下载成功判据
 
-A successful SRAM programming action requires all applicable evidence:
+一次 programming PASS 至少需要当前任务适用项全部成立：
 
-- intended chip family/target was selected
-- `download` Tcl call completed (`catch` result `0`)
-- TD process completed without programming error
-- no `PRG-... ERROR`
-- no cable-busy/device-not-found error
-- no ID mismatch
-- no bit/ChipWatcher-code mismatch
-- board entered the expected post-configuration state
+- 选择了预期 chip family / target
+- `download` Tcl 调用正常返回，`catch` result = `0`
+- TD process 没有 programming error
+- 没有 `PRG-... ERROR`
+- 没有 cable-busy / device-not-found
+- 没有 ID mismatch
+- 没有 bit / ChipWatcher code mismatch
+- 板卡进入预期配置后状态
 
-Because TD can report outer process success after internal tool errors, parse console/log text as well as the Tcl return code.
+由于 TD 外层 exit code 也可能误导，必须同时解析 Tcl 返回值和 console/log。
 
-## Runtime observation is a separate stage
+## Runtime observation 是独立阶段
 
-A bitstream without observability cannot reveal arbitrary internal state after download.
+bitstream 下载后，如果没有 observability path，就无法凭空读取任意内部寄存器。
 
-Useful machine-readable debug evidence includes:
+适合给 Agent 的机器可读证据包括：
 
-- transaction counters
-- completion flags/pulses
-- returned data
-- sticky error flags
-- error codes
-- expected-value match flags
+- transaction counter
+- completion flag / pulse
+- 返回数据
+- sticky error flag
+- error code
+- expected-value match flag
 
-Prefer sticky status for software-like polling. A one-cycle pulse is usually better used as a trigger than as the only pass/fail evidence.
+软件式轮询优先使用 sticky status。
 
-## ChipWatcher flow
+只有一个 clock 的 pulse 更适合作为 trigger，而不是唯一 PASS/FAIL 证据。
 
-1. Add the required internal signals before the final debug build.
-2. Generate the matching debug `.bit` and `.cwc`.
-3. Program that debug bitstream.
-4. Open ChipWatcher `Watch`.
-5. Use `Single Trigger` for a configured event or `Instant Trigger` for an immediate snapshot.
-6. Save the waveform or export CSV when automated parsing/archival is needed.
+## ChipWatcher 流程
 
-If unattended capture is required, configure and validate a power-on trigger before bitgen, or expose a stable machine-readable result through UART, host registers, Virtual Probe Interface, or another interface that the agent can read.
+1. final debug build 前加入需要观察的内部信号。
+2. 生成匹配的 debug `.bit` 和 `.cwc`。
+3. 下载该 debug bitstream。
+4. 打开 ChipWatcher `Watch`。
+5. 已配置事件用 `Single Trigger`；立即快照用 `Instant Trigger`。
+6. 自动分析或归档需要时保存 waveform / 导出 CSV。
 
-LEDs are useful for coarse sanity checks but are weak evidence for detailed internal behavior.
+需要无人值守 capture 时，可以：
 
-## Failure classification
+- bitgen 前配置并验证 power-on trigger；或
+- 通过 UART、host register、Virtual Probe Interface 等稳定接口暴露机器可读结果。
+
+LED 可以做粗略 sanity check，但不能代替详细内部状态证据。
+
+## 常见失败分类
 
 ### `device not found`
 
-Check:
+检查：
 
-- target power/VREF
-- cable orientation
+- target power / VREF
+- cable 方向
 - driver binding
 - cable ownership
 - JTAG continuity
 
-### TD searches for `0403:6042` while legacy `336C:1001` AL-Link is connected
+### 接的是 legacy `336C:1001` AL-Link，但 TD 在找 `0403:6042`
 
-The wrong cable/debug-server mode is selected. Use the direct legacy AL-Link mode rather than forcing an AL-LINK-FT/HwServer path.
+说明选择了错误 cable/debug-server mode。
 
-### Server TCP port is open but TD still cannot connect
+应使用 legacy AL-Link direct mode，而不是强行走 AL-LINK-FT/HwServer。
 
-Verify server implementation/protocol and TD debug mode, not only TCP reachability.
+### Server TCP 端口已打开，但 TD 仍连不上
+
+检查 server 实现/protocol 与 TD debug mode 是否匹配，而不是只检查 TCP reachability。
 
 ### `bit file does not match ChipWatcher`
 
-Use the `.bit` and `.cwc` generated by the same debug build.
+使用**同一次 debug build** 生成的 `.bit` 和 `.cwc`。
 
-### ChipWatcher triggers but expected event is absent
+### ChipWatcher 已触发，但预期事件不存在
 
-Check:
+检查：
 
-- probe/debug clock exists and is running
-- trigger condition
-- observed net was not optimized/remapped unexpectedly
-- the application reset/clock domain is active
-- the event actually occurs in the tested scenario
+- probe/debug clock 是否存在并运行
+- trigger condition 是否正确
+- observed net 是否被优化/重映射
+- application reset/clock domain 是否真正工作
+- 测试场景中目标事件是否实际发生
 
-### Download succeeds but application behavior is wrong
+### Download 成功但应用行为错误
 
-Stop repeating download as a substitute for debugging. Inspect reset, clocks, pinout, buses, protocol state, sticky error/status signals, and actual runtime waveforms/data.
+不要反复重新下载代替调试。
+
+转而检查：
+
+- reset
+- clocks
+- pinout
+- buses
+- protocol state
+- sticky error/status
+- 实际 runtime waveform / data
