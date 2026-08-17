@@ -1,12 +1,12 @@
-# CCS 7.2 DSS debugging reference
+# CCS 7.2 DSS 调试参考
 
-Use this reference for DSS connection, program loading, runtime observation, breakpoints, stepping, call-stack analysis, or a persistent interactive debug service.
+当任务涉及 DSS 连接、程序下载、运行变量读取、断点、单步、调用栈或常驻交互式调试服务时读取本文件。
 
-## DSS basics
+## DSS 基本用途
 
-CCS Debug Server Scripting (DSS) lets an agent control the CCS debug server from JavaScript without opening the CCS GUI.
+CCS Debug Server Scripting（DSS）允许 Agent 通过 JavaScript 控制 CCS Debug Server，而不需要打开 CCS GUI。
 
-Typical setup:
+典型初始化：
 
 ```javascript
 importPackage(Packages.com.ti.debug.engine.scripting);
@@ -18,33 +18,31 @@ var server = env.getServer("DebugServer.1");
 server.setConfig(ccxml);
 ```
 
-Set an explicit timeout appropriate for connect/program/verify/run operations:
+为连接、烧录、校验和运行设置明确超时：
 
 ```javascript
 env.setScriptTimeout(300000);
 ```
 
-## Session selection
+## Session 选择
 
-For a `.ccxml` already confirmed to expose a single target, the verified CCS 7.2 pattern is:
+如果已经确认 `.ccxml` 只有一个目标，CCS 7.2 已验证的优先方式是：
 
 ```javascript
 session = server.openSession();
 ```
 
-Do not guess a device-name regex such as:
+不要随意猜：
 
 ```javascript
 server.openSession(".*<DEVICE_NAME>.*");
 ```
 
-CCS's internal session name does not necessarily contain the displayed chip name.
+因为 CCS 内部 session name 不一定包含界面显示的芯片名称。
 
-For multi-core targets, do not use the no-argument form blindly. Resolve the actual sessions and open the required core explicitly.
+多核目标不能盲目用无参数形式，应先确认真实 session，再显式打开需要的核。
 
-## Connect and program options
-
-After opening the session:
+## 连接与程序装载选项
 
 ```javascript
 session.target.connect();
@@ -57,79 +55,83 @@ session.options.setString("VerifyAfterProgramLoad", "Full verification");
 session.memory.loadProgram(program);
 ```
 
-`AutoRunToLabelOnRestart=false` avoids a common load timeout when the application uses custom startup and CCS tries to auto-run to `main`.
+`AutoRunToLabelOnRestart=false` 可以避免自定义 startup 工程在 load 后被 CCS 自动 run-to-main 导致超时。
 
-For Flash programming, allow enough script timeout for erase, program, verify, and restart.
+Flash programming 时要给 erase/program/verify/restart 留足 timeout。
 
-For RAM-only loading, first prove through the map that the executable's loadable sections are in RAM. See `ram-only.md`.
+RAM-only 下载前必须先通过 map 证明 executable 的可装载 section 都在 RAM，见 `ram-only.md`。
 
-## Writable TI application data
+## TI AppData 写权限
 
-In a restricted/sandboxed environment, CCS tools may fail to write normal AppData and emit text similar to:
+受限环境中可能出现：
 
 ```text
 Access denied
 If this continues, please run fsclean or set TI_APPDATA_DIR to directory you have permissions to access
 ```
 
-Set a workspace-local writable directory before invoking DSS:
+执行 DSS 前设置工作区内可写目录：
 
 ```powershell
 $env:TI_APPDATA_DIR = '<WRITABLE_DIR>\ti-appdata'
 New-Item -ItemType Directory -Force -Path $env:TI_APPDATA_DIR | Out-Null
 ```
 
-Do not accept a nominally successful outer command when the DSS log only contains an access error.
+如果 DSS 日志只有权限错误，即使外层命令看起来“成功”，也不能算通过。
 
-## Prefer live reads for ordinary globals
+## 普通全局变量优先运行中读取
 
-For counters, state values, heartbeats, and ordinary globals in readable memory, prefer keeping the target running when real-time memory access works:
+计数器、状态值、心跳和普通全局变量，在 real-time memory access 可用时优先让 target 保持运行：
 
 ```javascript
 session.target.runAsynch();
 var value = session.expression.evaluate("<EXPRESSION>");
 ```
 
-On C2000, real-time debug may require application/target support such as `ERTM;` and the corresponding CCS target configuration.
+C2000 的实时调试通常还要求程序/目标配置支持，例如执行：
 
-The expression path is conceptually:
-
-```text
-expression/symbol
-→ debugger resolves address/type from the loaded symbols
-→ XDS reads target memory
-→ DSS returns the typed value
+```c
+ERTM;
 ```
 
-No application UART/CAN protocol is required just to inspect a symbol through JTAG.
+expression 读取的本质：
 
-### Limits of live reads
+```text
+变量/表达式
+→ CCS 根据已加载符号解析地址和类型
+→ XDS 通过 JTAG 读取目标内存
+→ DSS 返回对应值
+```
 
-- multiple expressions are not an atomic snapshot
-- the CPU can modify a multi-word object while it is being read
-- locals/call stack/register inspection may require halt
-- some memory/registers do not support useful live access
-- high-rate JTAG reads can perturb real-time behavior
-- read-to-clear or other side-effect registers must not be polled casually
+因此读取普通符号不依赖应用层 UART/CAN 协议。
 
-Use halt/read/resume when the task requires a consistent snapshot or debug state:
+### 运行中读取的限制
+
+- 多个 expression 依次读取，不是原子快照。
+- CPU 可能在读取多字变量时同时更新它，出现撕裂读。
+- 局部变量、调用栈、寄存器检查可能需要 halt。
+- 某些内存/寄存器不支持合适的实时访问。
+- 高频 JTAG 读取可能对实时性产生扰动。
+- read-to-clear 等有副作用寄存器不能随意轮询。
+
+需要一致快照时再使用：
 
 ```javascript
 session.target.halt();
 var value = session.expression.evaluate("<EXPRESSION>");
 ```
 
-## Bulk memory reads
+## 连续大块数据使用批量读取
 
-For arrays, sample buffers, or waveform blocks, avoid one expression evaluation per element.
+数组、采样 buffer、波形数据不要逐元素 `expression.evaluate()`。
 
-Resolve a symbol once:
+先解析首地址：
 
 ```javascript
 var address = session.symbol.getAddress("<BUFFER_SYMBOL>");
 ```
 
-Then read a contiguous block:
+再批量读取：
 
 ```javascript
 var data = session.memory.readData(
@@ -141,42 +143,42 @@ var data = session.memory.readData(
 );
 ```
 
-When using direct memory reads, account for:
+直接读内存时必须自己保证：
 
-- correct `Memory.Page`
-- C28x 16-bit word addressing semantics
-- element width
-- signedness/endian/multi-word consistency
-- symbol file matching the program actually running on target
+- `Memory.Page` 正确
+- C28x 16-bit word addressing 语义正确
+- element width 正确
+- signedness / endian / 多字一致性正确
+- 当前 `.out` 符号和 target 真正运行的程序一致
 
-## One-shot validation vs persistent interactive debug
+## 一次性验证 vs 常驻交互式调试
 
-Use one-shot DSS when the success predicate is already known and stable:
+成功条件已经明确时，用一次性 DSS：
 
 ```text
 connect
 → load
 → run
-→ sample known evidence
+→ 采样已知证据
 → PASS/FAIL
 → cleanup
 ```
 
-Use a persistent session for an unknown bug:
+未知 Bug 用常驻 session：
 
 ```text
-connect once
+connect 一次
 → load RAM image
-→ set breakpoint
+→ 设置断点
 → continue
-→ inspect PC/call stack/locals/globals
-→ step or add another breakpoint
-→ modify code
-→ rebuild/reload
-→ reproduce and verify
+→ 查看 PC / call stack / locals / globals
+→ step 或增加断点
+→ 修改源码
+→ rebuild / reload
+→ 复现并验证
 ```
 
-A persistent debug service should retain:
+常驻服务应保留：
 
 ```text
 ScriptingEnvironment
@@ -184,20 +186,18 @@ DebugServer
 DebugSession
 loaded symbols
 breakpoint IDs
-current run/halt state
+当前 run/halt 状态
 ```
 
-CCS 7.2 includes a reference server concept under:
+CCS 7.2 自带参考概念：
 
 ```text
 D:\04-software\CCSv720\ccsv7\ccs_base\scripting\examples\TestServer
 ```
 
-For an AI-facing service, expose a small explicit command surface instead of a general arbitrary shell.
+给 AI 用时，建议暴露一个小而明确的命令集，不要变成任意 shell。
 
-## Useful interactive operations
-
-Suggested command set:
+## 推荐交互命令集
 
 ```text
 connect
@@ -237,7 +237,7 @@ detach
 quit
 ```
 
-Representative DSS mappings:
+对应 DSS API 示例：
 
 ```javascript
 session.target.runAsynch();
@@ -260,37 +260,37 @@ session.expression.evaluate("<EXPRESSION>");
 session.callStack.print();
 ```
 
-### `run()` vs `runAsynch()`
+## `run()` 与 `runAsynch()`
 
 ```javascript
 session.target.run();
 ```
 
-is synchronous and blocks until the target stops. Use it only when a stop is expected and a timeout protects the call.
+同步执行，会一直阻塞直到 target 停止。只有预期会命中断点/停止并且有 timeout 保护时才使用。
 
 ```javascript
 session.target.runAsynch();
 ```
 
-returns immediately and is the preferred primitive for an interactive service that later issues `status`, `halt`, or reads.
+启动后立即返回，更适合常驻交互服务，之后再执行 `status`、`halt`、变量读取等操作。
 
-## Verified capabilities on CCS 7.2 + XDS100V3 + F28335
+## 已在 CCS 7.2 + XDS100V3 + F28335 验证的能力
 
-The reference environment has successfully demonstrated:
+已实际验证：
 
-- symbol breakpoint hit
-- source-file/line breakpoint hit
-- PC/global/local reads
-- call stack printing
-- source Step Over with observed variable changes
-- removing one/all breakpoints
-- restoring target execution after debug
+- 按符号设置断点并命中
+- 按源码文件/行设置断点并命中
+- 读取 PC、全局变量、局部变量
+- 打印调用栈
+- 源码级 Step Over，并观察执行后的变量变化
+- 删除单个/全部断点
+- 调试结束后恢复目标运行
 
-Treat these as evidence that the API path works on that environment, not as proof that every target configuration exposes every feature identically.
+这些结果证明当前参考环境中的 API 路径可用，不代表所有芯片/配置都完全一致。
 
 ## Cleanup
 
-Always protect cleanup with `try/finally` behavior:
+所有 DSS 操作都应保证异常路径也释放资源：
 
 ```javascript
 try {
@@ -308,11 +308,11 @@ try {
 }
 ```
 
-If the user's task requires the target to continue running after the debug operation, resume it before disconnecting when that is safe and intended.
+如果任务要求目标在调试结束后继续运行，应在安全且符合任务要求时先恢复运行，再断开连接。
 
-## Machine-readable responses
+## 给 Agent 的结构化返回
 
-For an agent-controlled persistent server, prefer structured events such as:
+常驻调试服务最好返回机器可解析事件，例如：
 
 ```json
 {
@@ -328,7 +328,7 @@ For an agent-controlled persistent server, prefer structured events such as:
 }
 ```
 
-Useful event types include:
+推荐事件类型：
 
 ```text
 connected
@@ -343,4 +343,4 @@ target_error
 disconnected
 ```
 
-Each response should state success/failure, any error text/code, and the current target state so the agent can decide the next action reliably.
+每个返回至少包含：成功/失败、错误文本/错误码、当前 target 状态。这样 Agent 才能可靠决定下一步。
