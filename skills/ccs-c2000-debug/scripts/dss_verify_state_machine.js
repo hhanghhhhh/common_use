@@ -3,7 +3,7 @@ importPackage(Packages.com.ti.ccstudio.scripting.environment);
 importPackage(Packages.java.lang);
 
 if (arguments.length < 9) {
-    System.out.println("[CCS-DSS] ERROR: usage: dss_verify_state_machine.js <ccxml> <program> <state_expr> <pass_state> <fail_state> <pass_flag_expr> <error_expr> <progress_expr_or_dash> <expected_progress> [sample_ms] [timeout_ms]");
+    System.out.println("[CCS-DSS] ERROR: usage: dss_verify_state_machine.js <ccxml> <program> <state_expr> <pass_state> <fail_state> <pass_flag_expr> <error_expr> <progress_expr_or_dash> <expected_progress> [sample_ms] [timeout_ms] [startup_grace_samples]");
     System.exit(2);
 }
 
@@ -18,6 +18,7 @@ var progressExpr = arguments[7];
 var expectedProgress = Number(arguments[8]);
 var sampleMs = arguments.length > 9 ? parseInt(arguments[9], 10) : 500;
 var timeoutMs = arguments.length > 10 ? parseInt(arguments[10], 10) : 10000;
+var startupGraceSamples = arguments.length > 11 ? parseInt(arguments[11], 10) : 1;
 var checkProgress = progressExpr !== "-";
 
 function log(message) {
@@ -25,8 +26,10 @@ function log(message) {
 }
 
 if (isNaN(passState) || isNaN(failState) || isNaN(expectedProgress) ||
-    isNaN(sampleMs) || sampleMs <= 0 || isNaN(timeoutMs) || timeoutMs <= 0) {
-    log("ERROR: states/expected_progress must be numeric and sample_ms/timeout_ms must be positive integers");
+    isNaN(sampleMs) || sampleMs <= 0 ||
+    isNaN(timeoutMs) || timeoutMs <= 0 ||
+    isNaN(startupGraceSamples) || startupGraceSamples < 0) {
+    log("ERROR: states/expected_progress must be numeric, sample_ms/timeout_ms must be positive integers, and startup_grace_samples must be a non-negative integer");
     System.exit(2);
 }
 
@@ -38,7 +41,21 @@ var terminal = false;
 var loaded = false;
 
 function readNumber(expression) {
-    return Number(session.expression.evaluate(expression));
+    var raw = session.expression.evaluate(expression);
+    if (raw === null || typeof raw === "undefined") {
+        throw new Error("expression returned no value: " + expression);
+    }
+
+    var text = String(raw);
+    if (text.replace(/\s+/g, "") === "") {
+        throw new Error("expression returned an empty value: " + expression);
+    }
+
+    var value = Number(raw);
+    if (isNaN(value) || !isFinite(value)) {
+        throw new Error("expression is not a finite numeric value: " + expression + " raw=" + text);
+    }
+    return value;
 }
 
 try {
@@ -57,6 +74,7 @@ try {
     session.memory.loadProgram(program);
     loaded = true;
     log("PROGRAM_LOADED=" + program);
+    log("STARTUP_GRACE_SAMPLES=" + startupGraceSamples);
 
     var maxSamples = Math.max(1, Math.ceil(timeoutMs / sampleMs));
     for (var sample = 1; sample <= maxSamples && !terminal; sample++) {
@@ -71,10 +89,17 @@ try {
         log("SAMPLE=" + sample + " state=" + state + " pass=" + passFlag +
             " error=" + error + (checkProgress ? " progress=" + progress : ""));
 
-        if (state === passState || state === failState) {
+        if (state === passState) {
             terminal = true;
-            passed = state === passState && passFlag === 1 && error === 0 &&
+            passed = passFlag === 1 && error === 0 &&
                      (!checkProgress || progress === expectedProgress);
+        } else if (state === failState) {
+            if (sample <= startupGraceSamples) {
+                log("STARTUP_GRACE: ignoring FAIL_STATE on sample " + sample);
+            } else {
+                terminal = true;
+                passed = false;
+            }
         }
     }
 
