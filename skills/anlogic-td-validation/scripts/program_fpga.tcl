@@ -1,11 +1,10 @@
-# Legacy Anlogic AL-Link direct SRAM programming helper.
+# Legacy 安陆 AL-Link 直接 SRAM 下载辅助脚本。
 #
-# Usage with TD 2026.1 SP2 command line:
+# TD 2026.1 SP2 命令行用法：
 #   td_commands_prompt.exe program_fpga.tcl <bit_file> ?cable_index? ?jtag_mhz?
 #
-# This helper is for the direct numeric -cable mode verified with a legacy
-# Anlogic AL-Link. Do not use it blindly for AL-LINK-FT/HwServer or a remote
-# cable configuration.
+# 本脚本仅用于已经验证过的 legacy Anlogic AL-Link 数字 -cable 直连模式。
+# 不要直接套用到 AL-LINK-FT/HwServer 或远程 cable 配置。
 
 if {$argc < 1 || $argc > 3} {
     puts "ERROR: usage: program_fpga.tcl <bit_file> ?cable_index? ?jtag_mhz?"
