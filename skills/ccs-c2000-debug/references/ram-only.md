@@ -1,31 +1,33 @@
-# C2000 RAM-only validation
+# C2000 RAM-only 验证参考
 
-Read this reference when the task needs fast target validation without erasing/programming Flash.
+当任务需要在**不擦写/烧录 Flash** 的情况下快速进行真实目标验证时读取本文件。
 
-## When RAM validation is appropriate
+## 什么时候适合 RAM 验证
 
-RAM download is a good default for frequent edit-build-load-run-observe loops when behavior does not depend on the boot medium or Flash placement.
+只要行为不依赖启动介质或 Flash 地址布局，RAM 下载适合作为频繁“修改 → 编译 → 下载 → 运行 → 观察”的默认方式。
 
-Usually suitable:
+通常适合：
 
-- algorithms and business/control logic
-- interrupts and state machines
-- most peripheral drivers and communication logic
-- variable observation, breakpoints, and step debugging
+- 算法、业务逻辑、控制逻辑
+- 中断和状态机
+- 大部分外设驱动与通信逻辑
+- 变量观察、断点和单步调试
 
-Do not use RAM-only as final evidence for:
+以下问题不能只靠 RAM-only 作为最终证据：
 
-- BootROM, reset, or power-on boot behavior
-- `code_start` and Flash-to-RAM copy behavior
-- Flash wait-state/pipeline timing
-- linker address/layout bugs tied to Flash
-- Flash erase/program/update/checksum behavior
-- persistence across power loss
-- standalone operation with the probe removed
+- BootROM、Reset、上电启动
+- `code_start` 和 Flash → RAM 段复制
+- Flash wait-state / pipeline 时序
+- 与 Flash 地址布局有关的 linker 问题
+- Flash 擦除、烧录、升级、校验
+- 掉电保持
+- 拔掉仿真器后的独立运行
 
-## Do not load a Flash-linked `.out` and call it RAM-only
+## 不能把 Flash 版 `.out` 直接当成 RAM-only
 
-The loader follows the section LOAD addresses encoded in the executable. A typical Flash linker command can contain:
+Loader 会遵守 executable 中 section 的 **LOAD 地址**。
+
+典型 Flash linker 可能定义：
 
 ```text
 .text/.cinit/.econst:
@@ -33,62 +35,62 @@ LOAD = FLASH
 RUN  = RAM
 ```
 
-Calling:
+此时调用：
 
 ```javascript
 session.memory.loadProgram("<FLASH_OUT>");
 ```
 
-will still program the LOAD addresses in Flash before the application copies/executes code in RAM.
+仍然会先向 Flash 的 LOAD 地址编程，然后程序再把代码复制到 RAM 执行。
 
-A true RAM-only flow requires a separate executable whose loadable sections are linked to RAM.
+真正的 RAM-only 必须生成一个**可装载 section 本身就链接到 RAM** 的独立 executable。
 
-## Prefer dual output with one source/build configuration
+## 推荐：单一源码/编译配置 + 双输出
 
-Keep the human-facing CCS Flash configuration intact:
+保持人工正常使用的 CCS Flash 配置不动：
 
 ```text
-normal CCS Flash build
-├─ compiles current C/ASM sources
-├─ produces the fresh normal object files
-└─ links the normal Flash output
+正常 CCS Flash build
+├─ 编译当前 C/ASM 源码
+├─ 生成最新 .obj
+└─ 正常链接 Flash .out
 
-independent RAM re-link
-├─ reuses the fresh objects
-├─ excludes Flash startup/section-copy objects as required
-├─ uses an independent RAM linker command file
-├─ uses an appropriate RAM entry point
-└─ creates a separate RAM-only output for agent validation
+独立 RAM re-link
+├─ 复用上述最新 .obj
+├─ 按需要排除 Flash startup / section-copy 对象
+├─ 使用独立 RAM linker cmd
+├─ 使用适合 RAM 的入口点
+└─ 生成供 Agent 快速验证的独立 RAM .out
 ```
 
-This avoids a common failure mode where an agent switches the CCS configuration to RAM and leaves the next manual Flash build broken.
+这样可以避免 Agent 为了测试切换 CCS 配置，最后把用户下一次人工 Flash build 留在错误状态。
 
-Do not edit generated `Debug\makefile` to maintain this flow. Generated files can be recreated by CCS.
+不要通过长期修改 `Debug\makefile` 来维护这个流程，因为它是 CCS 自动生成文件。
 
-## Check available RAM before linking
+## 链接前先检查 RAM 容量
 
-Use the existing map to estimate program/data requirements before moving everything into on-chip RAM.
-
-Typical sections to inspect:
+从已有 map 估算程序和数据占用：
 
 ```powershell
 Select-String -Path '<FLASH_MAP>' `
     -Pattern '^\.text\s|^\.cinit\s|^\.const\s|^\.econst\s|^\.pinit\s|^\.switch\s|^\.ebss\s|^\.stack\s|^\.esysmem\s'
 ```
 
-For F28335 in particular:
+对于 F28335，重点确认：
 
-- fit code/constants/init tables into memory allocated to PAGE 0
-- fit `.ebss`, stack, heap, and user data into PAGE 1 allocations
-- do not map the same physical RAM block into both PAGE 0 and PAGE 1 for overlapping use
-- preserve regions needed by BootROM conventions, stacks, peripheral structures, DMA, or application-specific memory
-- if external RAM is used, guarantee its interface is initialized before code/data there is accessed
+- 程序、常量、初始化表能够放入 PAGE 0 分配的 RAM。
+- `.ebss`、stack、heap、用户数据能够放入 PAGE 1。
+- 同一物理 RAM block 不能同时在 PAGE 0 / PAGE 1 被重叠使用。
+- 保留 BootROM 约定、stack、外设映射、DMA 和工程自身需要的内存。
+- 如果使用外部 RAM，访问该 RAM 之前必须保证 XINTF/对应接口已经初始化完成。
 
-Do not ignore linker overflow just to obtain an executable.
+不能为了拿到 `.out` 而忽略 linker overflow。
 
-## RAM linker structure
+## RAM linker 的基本结构
 
-The exact addresses must come from the target datasheet/project memory map, but the structure is typically:
+实际地址必须依据目标芯片手册和当前工程 memory map，不能机械复制示例。
+
+典型结构：
 
 ```text
 MEMORY
@@ -124,40 +126,49 @@ SECTIONS
 }
 ```
 
-If startup/security/Flash-only objects declare unwanted sections, either exclude those objects from the RAM link or deliberately map their irrelevant sections as `DSECT`/`NOLOAD` when that is semantically correct.
+如果 startup/security/Flash 专用 object 仍声明不希望装载的 section，可以：
 
-## Entry point and Flash section-copy code
+- 从 RAM link 中排除对应 object；或
+- 在语义正确的前提下把无关 section 映射为 `DSECT` / `NOLOAD`。
 
-A typical Flash application can start like:
+## RAM 入口点与 Flash section-copy
+
+典型 Flash 应用启动链：
 
 ```text
 code_start
-→ watchdog/startup handling
-→ copy_sections from Flash to RAM
+→ watchdog / startup
+→ 从 Flash copy_sections 到 RAM
 → _c_int00
 → main
 ```
 
-A RAM-only image must not blindly execute Flash section-copy logic, because it can overwrite the just-loaded RAM program with stale Flash content.
+RAM-only 镜像不能盲目继续执行 Flash section-copy 逻辑，否则可能用旧 Flash 内容覆盖刚刚下载到 RAM 的新程序。
 
-For the verified F28335 non-BIOS project, the RAM link:
+在已经验证的 F28335 non-BIOS 工程中，RAM link 做法是：
 
-1. excluded `CodeStartBranch` and Flash `SectionCopy` objects
-2. linked with:
+1. 排除 `CodeStartBranch` 和 Flash `SectionCopy` object。
+2. 使用：
 
 ```text
 --entry_point=_c_int00
 ```
 
-3. loaded the resulting RAM executable directly
+3. 直接下载这个 RAM executable。
 
-Do not assume `_c_int00` for every project. If the application has a custom RAM startup path, use the project's actual required entry.
+**不要假设所有项目都应该使用 `_c_int00`。** 如果工程有自定义 RAM startup，必须采用工程真实入口。
 
-## Re-link fresh objects instead of recompiling with divergent flags
+## 优先复用最新 `.obj`，不要产生第二套编译参数
 
-An options file can list the existing objects, header linker command, RAM linker command, project libraries, and the correct RTS library.
+可以用 options file 列出：
 
-Example structure:
+- 当前 build 产生的业务 `.obj`
+- header linker cmd
+- RAM linker cmd
+- 工程库
+- 正确版本 RTS library
+
+示例：
 
 ```text
 -z
@@ -169,9 +180,9 @@ Example structure:
 "<COMPILER_DIR>/lib/rts2800_fpu32.lib"
 ```
 
-The `-z` linker mode must take effect before linker command files/options that would otherwise be interpreted as source input.
+`-z` 必须在 linker cmd/options 被解析前生效，否则 `.cmd` 有可能被误当成源码输入。
 
-Example re-link shape:
+示例 re-link 形式：
 
 ```powershell
 & '<COMPILER_DIR>\bin\cl2000.exe' `
@@ -186,39 +197,49 @@ Example re-link shape:
     -o '<RAM_OUT>'
 ```
 
-Use the actual project ABI/options/library set. Do not mechanically copy F28335 flags to another C2000 target.
+这里的 ABI、编译选项和库必须来自当前工程。不要把 F28335 的 flags 机械复制到别的 C2000 芯片。
 
-## Prove there are no Flash-loadable sections
+## 下载前必须证明没有 Flash 可装载段
 
-Inspect major sections in the RAM map:
+检查 RAM map 的主要 section：
 
 ```powershell
 Select-String -Path '<RAM_MAP>' `
     -Pattern '^\.text\s|^\.cinit\s|^\.const\s|^\.econst\s|^\.pinit\s|^\.switch\s|^\.ebss\s|^\.stack\s'
 ```
 
-For F28335, the verified Flash range check used the main Flash address region `0x300000-0x33FFFF`:
+对于 F28335，参考工程还检查了主要 Flash 地址范围 `0x300000-0x33FFFF`：
 
 ```powershell
 Select-String -Path '<RAM_MAP>' -Pattern '^\S.*\s+[01]\s+003[0-3][0-9a-f]{4}\s+[0-9a-f]{8}'
 ```
 
-Interpret matches rather than blindly rejecting every address-like line. `DSECT`, `NOLOAD`, and peripheral mapping declarations are different from loadable `.text/.cinit/.econst` output sections.
+不要简单地看到地址匹配就判失败，要区分：
 
-Do not proceed with RAM-only validation while a loadable program/constant section still resolves to Flash.
+- 真正可装载的 `.text/.cinit/.econst/...`
+- `DSECT`
+- `NOLOAD`
+- 外设映射声明
 
-## Loading the RAM image
+只要仍存在需要加载的程序/常量 section 位于 Flash，就不能继续把它当 RAM-only 验证。
 
-Once the map proves RAM placement, DSS can use the same loader API:
+## 下载 RAM 镜像
+
+确认 map 后，DSS 仍然可以使用：
 
 ```javascript
 session.memory.loadProgram("<RAM_OUT>");
 ```
 
-The API name `loadProgram` does not inherently mean Flash programming. The executable's load addresses determine whether the loader writes RAM or invokes Flash programming.
+`loadProgram` 这个 API 名称本身不意味着一定烧 Flash；真正决定写 RAM 还是 Flash 的是 executable 中的 load address。
 
-## After validation
+## 验证结束后
 
-Remember the RAM image is volatile. Reset or power loss removes it, and the device returns to whatever persistent boot/Flash image is present.
+RAM 镜像是易失的：Reset 或掉电后会消失，目标会重新执行已有的持久化 Boot/Flash 镜像。
 
-When the RAM workflow is implemented as a second link output, re-check that the normal Flash configuration still has its intended entry point, startup objects, linker file, and excluded RAM-test helper directory.
+采用双输出方案时，验证完成后再次确认正常 Flash 配置仍保持正确的：
+
+- entry point
+- startup object
+- linker cmd
+- RAM test/helper 目录排除规则。
