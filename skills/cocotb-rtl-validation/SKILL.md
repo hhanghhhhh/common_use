@@ -1,11 +1,19 @@
 ---
 name: cocotb-rtl-validation
-description: 使用 Cocotb 配合 Icarus Verilog 或 ModelSim/Questa，在隔离仿真目录中验证 Verilog/SystemVerilog RTL 的功能、协议时序、边界条件与代码覆盖率。适用于建立 Python 驱动的 RTL 测试、wrapper/开漏总线模型、快速回归、FST 波形，以及语句、分支、条件、表达式和 Toggle 覆盖率分析。综合、布局布线、时序收敛、bitstream 与 FPGA 下板验证应使用实现类 Skill，不要使用本 Skill 替代。
+description: 仅在用户显式调用本 Skill，或在 RTL 代码开发中明确指定某个 Verilog/SystemVerilog 模块、接口或功能块并要求进行 Cocotb/Icarus/ModelSim/Questa 仿真或代码覆盖率验证时使用。通常用于 RTL 修改后的定向功能回归、协议时序检查、边界测试和波形分析。不要因为读取、修改或完成了 RTL/FPGA 代码就自动使用；普通源码审查、编译、泛泛的“验证一下”、综合、布局布线、静态时序、bitstream 或 FPGA 下板均不触发本 Skill。
 ---
 
 # Cocotb RTL 功能与覆盖率验证
 
 目标是形成可重复的 RTL 证据链：独立编译 → 聚焦测试 → 完整回归 → 波形/结果 → 可选覆盖率。仿真 PASS 不等于综合、静态时序或真实硬件 PASS。
+
+## 使用前提
+
+- 只有用户明确指定 DUT、模块、接口或功能块，并明确要求 RTL 仿真/覆盖率，或显式调用 `$cocotb-rtl-validation` 时才开始。
+- RTL 修改完成本身不是触发条件；不要把本 Skill 作为所有 Verilog/SystemVerilog 改动后的自动步骤。
+- 用户只要求综合、编译、代码审查、修复、下板或笼统验证时不要使用；按任务选择实现类 Skill 或现有测试。
+- 本 Skill 适合在改完 RTL 后，按用户要求为指定功能块建立或运行定向回归。
+- 显式调用 Skill 但未说明 DUT 时，先从当前改动识别候选范围；无法唯一确定时再询问用户。
 
 ## 一、选择验证层级
 

@@ -63,6 +63,30 @@ session.memory.loadProgram("<FLASH_OUT>");
 └─ 生成供 Agent 快速验证的独立 RAM .out
 ```
 
+推荐目录关系：
+
+```text
+<权威工程>/
+├─ APP、DSP_common、cmd...       # 权威源码，不复制
+├─ Debug/                       # CCS 原配置在原地生成的最新 .obj/.out
+└─ ram_test/                    # RAM-only 辅助目录
+   ├─ ram_linker.cmd
+   ├─ ram_link.opt              # 显式引用 ../Debug/*.obj
+   ├─ app_ram.out
+   ├─ app_ram.map
+   └─ DSS 脚本/日志（按需）
+```
+
+先在权威工程的 `Debug` 目录完成原配置构建，再从 `ram_test` 复用这些新 `.obj` 独立链接。`ram_test` 不保存源码副本、generated makefile 或复制来的旧 `.obj`。
+
+上述 `ram_test/` 位于 CCS 工程根目录时，必须在 `.cproject` 的所有正常 Debug/Release configuration 中排除整个目录。CCS Managed Build 会递归识别工程树内的 linker `.cmd`；如果未排除，正常 Flash linker 和 RAM linker 会同时加入，典型报错为 memory range 重复或重叠。也可以把 `ram_test` 建在工程资源树外，并用明确相对路径或绝对路径引用权威 `Debug/*.obj`。
+
+排除后执行一次 normal clean build，并同时验证：
+
+- generated `sources.mk` 的 `SUBDIRS` 不再包含 `ram_test`；
+- 正常 Flash 最终链接命令不包含 RAM linker cmd；
+- 独立 RAM re-link 仍显式引用预期 RAM linker 和最新对象。
+
 这样可以避免 Agent 为了测试切换 CCS 配置，最后把用户下一次人工 Flash build 留在错误状态。
 
 不要通过长期修改 `Debug\makefile` 来维护这个流程，因为它是 CCS 自动生成文件。

@@ -42,8 +42,12 @@ RAM-only 不能靠文件名判断；必须从 map 证明所有可装载 section 
 
 ## 三、硬性规则
 
-- 使用工程实际 compiler 和 generated build system；不要长期修改自动生成的 `Debug/makefile`。
+- 使用工程实际 compiler 和 CCS Managed Build；不得手工维护自动生成的 `Debug/makefile`、`sources.mk`、`objects.mk`、`subdir_vars.mk` 或 `subdir_rules.mk`。
+- 新增 `.c` 时，把它作为工程资源加入源码树，其他模块只包含其 `.h`。不得用 `#include "xxx.c"` 代替加入构建；遇到既被包含又被独立编译的 `.c`，优先改成标准 `.c + .h`。有意采用 unity build 时必须显式将被包含的 `.c` 从当前配置排除，并说明原因。
+- 工程临时验证文件统一放在 `APP/validation/`：DSP 侧使用标准 `.c + .h`，上位机脚本和辅助文件也放在该目录；调用方使用 `validation/<name>.h`。验证 `.c` 需要参与当前构建时不得排除，退出验证或生成正式配置时同时移除调用点或用明确宏关闭，并按配置排除验证目录，避免临时代码混入发布镜像。
+- 外部工具创建源码后，先刷新 CCS 工程资源并确认当前配置未 `Exclude from Build`，再用 Managed Build 执行一次 clean build，让 CCS 重建 generated makefile。不要直接运行旧 `Debug/gmake` 来发现新源文件。完整流程和判据见 `references/managed-build.md`。
 - 不要为规避写权限而直接复制带 generated build 目录的 CCS 工程后原样构建；makefile、依赖文件和预构建命令可能嵌入原工程绝对路径。优先在权威工程目录按需申请写权限执行；必须隔离时重新生成构建文件，并验证所有输入、输出和预构建路径都指向副本。
+- RAM-only 首选布局：在权威工程目录用原 generated build 完整编译，得到本轮 `.obj`；另建 `ram_test` 等辅助目录，只放 RAM linker、link options、RAM `.out/.map`、DSS 脚本和日志，并从 options 显式引用权威 build 目录的新 `.obj`。如果 `ram_test` 位于 CCS 工程根目录内，必须在所有正常 Debug/Release 配置中排除整个目录，否则 Managed Build 会把其中的 RAM `.cmd` 自动加入正常 Flash 链接，造成 memory range 重复定义。也可把辅助目录放到工程资源树外。不要复制源码工程或 `Debug` 目录来生成 RAM 输出。
 - 正常 Flash 配置保持不动。RAM 验证优先复用最新 `.obj`，用独立 RAM linker 生成第二个 `.out`。
 - RAM 输出不得执行会用旧 Flash 内容覆盖 RAM 的 Flash section-copy 启动链。
 - XDS 连接失败先检查 CCS/Debug Server 是否占用 probe；不要直接强杀可能有未保存内容的 CCS GUI。
@@ -58,9 +62,9 @@ RAM-only 不能靠文件名判断；必须从 map 证明所有可装载 section 
 
 ## 四、执行顺序
 
-1. 检查 `.cproject`、makefile、linker、`.ccxml`、现有输出和待观察代码。
-2. 用工程自身配置编译，确认链接完成、输出时间戳属于本次构建并分类 warning。
-3. 如需 RAM-only，估算容量、独立重新链接并检查 map；不要破坏 Flash 配置。
+1. 检查 `.project`、`.cproject`、generated makefile、linker、`.ccxml`、现有输出和待观察代码；新增源码时同时检查 `APP/validation` 归档、重复编译、`.c` 直包含和 `Exclude from Build`，并确认 `ram_test` 等辅助目录不会进入正常配置。
+2. 在权威工程目录刷新资源并用 CCS Managed Build 编译；从 `Building file` 和最终链接命令确认每个新增 `.c` 恰好产生并链接一个 `.obj`，再确认 `.obj/.out` 时间戳属于本次构建并分类 warning。
+3. 如需 RAM-only，在独立辅助目录复用上述 `.obj` 重新链接并检查 map；辅助目录只保存 RAM 专用输入和输出，不复制或修改 generated build。若辅助目录位于工程树内，先从所有正常配置排除，并确认正常 `sources.mk` 和最终 Flash 链接命令均不含该目录或 RAM linker cmd。
 4. 设置可写 `TI_APPDATA_DIR`，通过 DSS 连接、装载并进入预期运行状态。
 5. 按任务选择运行中读取、一致快照、断点或批量内存读取，直到得到终态或 timeout。
 6. 根据行为证据判定并有意识地结束调试。
@@ -78,6 +82,7 @@ RAM-only 不能靠文件名判断；必须从 map 证明所有可装载 section 
 
 - 使用预期源码、配置、compiler、probe 和 target
 - 构建/链接完成，输出属于本次执行，无阻塞错误
+- 正常 Debug/Release 链接没有混入 `ram_test` 或 RAM-only linker cmd
 - RAM-only map 无 Flash 可装载段；Flash 任务实际加载的是预期 Flash 镜像
 - 程序进入预期运行状态，业务证据满足判据
 - warning 和工具日志已分类，不依赖外层退出码猜测成功
@@ -85,6 +90,7 @@ RAM-only 不能靠文件名判断；必须从 map 证明所有可装载 section 
 
 ## 七、Reference 路由
 
+- 新增/删除源码、Managed Build、generated makefile、重复定义 → `references/managed-build.md`
 - RAM linker、双输出、map 检查 → `references/ram-only.md`
 - DSS API、状态机回归、断点/单步、实时读取 → `references/dss-debug.md`
 - XDS100、FTDI、连接占用和 JTAG 排障 → `references/troubleshooting.md`
