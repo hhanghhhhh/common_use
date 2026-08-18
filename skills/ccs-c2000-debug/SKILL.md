@@ -43,6 +43,7 @@ RAM-only 不能靠文件名判断；必须从 map 证明所有可装载 section 
 ## 三、硬性规则
 
 - 使用工程实际 compiler 和 generated build system；不要长期修改自动生成的 `Debug/makefile`。
+- 不要为规避写权限而直接复制带 generated build 目录的 CCS 工程后原样构建；makefile、依赖文件和预构建命令可能嵌入原工程绝对路径。优先在权威工程目录按需申请写权限执行；必须隔离时重新生成构建文件，并验证所有输入、输出和预构建路径都指向副本。
 - 正常 Flash 配置保持不动。RAM 验证优先复用最新 `.obj`，用独立 RAM linker 生成第二个 `.out`。
 - RAM 输出不得执行会用旧 Flash 内容覆盖 RAM 的 Flash section-copy 启动链。
 - XDS 连接失败先检查 CCS/Debug Server 是否占用 probe；不要直接强杀可能有未保存内容的 CCS GUI。
@@ -50,6 +51,8 @@ RAM-only 不能靠文件名判断；必须从 map 证明所有可装载 section 
 - 普通全局量优先运行中读取；需要一致快照、局部变量或调用栈时再 halt。
 - 连续 buffer 使用批量 `memory.readData()`；不要逐元素高频求值，也不要轮询 read-clear 寄存器。
 - `dss.bat` 退出码可能为 `0` 但脚本内部失败；必须检查明确 PASS 标记和业务证据。
+- 同一时刻只启动一个 DSS/eclipsec 会话。保存并持续轮询启动器返回的 session，确认当前实例退出后才能重试；不要用第二个 headless 实例覆盖无输出问题。
+- 已设置可写 `TI_APPDATA_DIR` 仍出现 `CSIDL`/AppData/权限错误时，把它判为执行环境问题，立即对同一最小 DSS 命令申请非沙箱执行；不要反复更换启动方式或继续叠加进程。
 - “程序成功装载”不等于功能正确；PASS 必须来自变量、事件、通信或其他目标行为。
 - 结束时明确 target 是 running/halted、session 是否断开以及原因；异常路径也必须 cleanup。
 

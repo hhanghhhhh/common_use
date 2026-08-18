@@ -67,6 +67,17 @@ session.memory.loadProgram("<FLASH_OUT>");
 
 不要通过长期修改 `Debug\makefile` 来维护这个流程，因为它是 CCS 自动生成文件。
 
+### 不要盲目复制 generated build 目录
+
+CCS 生成的 `makefile`、`subdir_vars.mk`、依赖文件和 pre-build 命令可能保存 `${ProjDirPath}` 展开的绝对路径。把整个工程复制到隔离目录后直接运行旧 `Debug/makefile`，可能发生：
+
+- 源文件仍从原工程读取；
+- `build_info.h` 等生成文件仍写回原工程；
+- 旧对象因时间戳被误判为 up to date；
+- 表面构建成功，实际产物并不属于隔离副本。
+
+优先在权威工程目录使用原配置构建并按需申请写权限。必须隔离时，通过 CCS 重新生成 build 目录，或逐项验证 source/include/pre-build/output/dependency 的绝对路径；不能只修一个 makefile 路径后就认定隔离构建可靠。
+
 ## 链接前先检查 RAM 容量
 
 从已有 map 估算程序和数据占用：

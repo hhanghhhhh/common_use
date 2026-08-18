@@ -7,6 +7,8 @@ description: 通过 DSP 调试器和 XINTF/EMIF 等并行总线，把 FPGA 内�
 
 把本 Skill 作为跨器件编排层。DSP 工具链细节交给 `ccs-c2000-debug`，FPGA 实现和下载细节交给 `anlogic-td-validation`；本 Skill 只负责桥接接口、联合顺序、分层证据和问题归因。
 
+先按用户要求划定验证边界。用户只要求使用已知 IP、端口和报文做上位机黑盒通信验证时，走 W5500 快速路径，不进入 DSP–FPGA 联合流程，不额外检查源码、EEPROM、DSS 变量、心跳、计数器或 FPGA 状态。只有黑盒验证失败、用户要求定位内部原因，或任务本身明确涉及 DSP–FPGA bridge 时，才升级为分层诊断。
+
 ## 一、开始前确认
 
 从当前两侧工程重新确认：
@@ -39,14 +41,17 @@ AI 不能自动扫描任意 FPGA 内部信号。要观察或控制的对象必�
 
 | 任务 | 动作 | 按需读取 |
 |---|---|---|
+| 已知 IP/端口/报文的 W5500 黑盒收发 | `ping` + 发送指定报文 + 校验响应；到此即止 | `references/w5500-modbus-extension.md` |
 | 新增 FPGA 状态观察 | FPGA 只读映射 + DSP `volatile` 镜像 | `references/xintf-bridge-design.md` |
 | 新增安全参数/动作 | 暂存参数 + commit/done 序号 + DSP 命令邮箱 | `references/xintf-bridge-design.md` |
 | 联合编译、下载和回归 | 先确认接口版本，再 FPGA 先下载、DSP 后启动 | `references/joint-debug-workflow.md` |
 | 判断失败属于哪一层 | 按 DSP、bridge、FPGA 业务、外部器件分层 | `references/failure-localization.md` |
-| 通过 W5500/Modbus 延伸到 PC | 只发布受控状态和白名单命令 | `references/w5500-modbus-extension.md` |
+| 设计或诊断 W5500/Modbus 到 DSP/FPGA 的内部映射 | 只发布受控状态和白名单命令，按失败层深入 | `references/w5500-modbus-extension.md` |
 | 查找本机已验证参考入口 | 只作为候选路径，重新确认当前版本 | `references/local-defaults.md` |
 
 ## 四、联合执行顺序
+
+仅在任务确实要求 DSP–FPGA 联合验证时执行本节；W5500 黑盒快速验证不执行本节。
 
 1. 搜索所有现有总线访问和寄存器映射，划分不冲突的业务、调试和链路自检窗口。
 2. 先定义 identity、map version、状态/错误/计数、snapshot 及命令提交协议，再修改两侧代码。
@@ -89,6 +94,17 @@ DSS 使用有界轮询等待业务 `done`，同时打印原始状态、失败阶
 不要把两套底层工具命令复制进本 Skill；只保留跨器件依赖和联合判据。
 
 ## 八、最终报告
+
+W5500 黑盒快速验证只报告以下内容，不套用联合验收模板：
+
+```text
+PING: PASS | FAIL
+REQUEST: 实际发送的十六进制报文
+RESPONSE: 实际收到的十六进制报文或 timeout
+VALIDATION: PASS | FAIL，以及协议字段/数据是否匹配
+```
+
+DSP–FPGA 联合任务才使用以下模板：
 
 ```text
 DSP BUILD/LOAD: PASS | FAIL | NOT RUN，输出与模式

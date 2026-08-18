@@ -45,6 +45,10 @@ New-Item -ItemType Directory -Force -Path $env:TI_APPDATA_DIR | Out-Null
 
 AppData 权限失败时，即使外层命令返回成功也不能判 PASS。
 
+在受限执行环境中，已经设置可写 `TI_APPDATA_DIR` 后仍出现 `Could not get CSIDL`、AppData 或权限错误时，不要继续改写脚本或轮换启动器。立即用同一条最小 DSS 命令申请非沙箱执行；成功与否仍以脚本内 PASS 和业务证据为准。
+
+CCS 7.x 的 `dss.bat` 在存在 `eclipsec.exe` 时会优先启动 Eclipse headless runner，启动阶段可能暂时没有标准输出。必须保留工具返回的 session ID，并用有界等待持续轮询。任何重试前先确认本轮 `dss/eclipsec/java` 已退出；严禁同时启动多个实例争用 CCS workspace 或 XDS probe。只结束能够确认由本轮创建的进程。
+
 ## 观察策略
 
 普通全局状态和计数器在 real-time access 可用时优先运行中读取：
