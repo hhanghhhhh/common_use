@@ -137,16 +137,6 @@ if ($dssOutput -notmatch 'PASS') { ... }
 - 设置总 timeout。
 - 只有符合变量/事件真实语义时才判 PASS。
 
-## RAM-only 镜像意外触发 Flash programming
-
-大概率是 executable 仍包含 Flash LOAD 地址。
-
-检查 map；文件名中出现 `ram` 没有证明力。
-
-F28335 参考流程中，需要确认 `.text/.cinit/.econst/...` 等真正可装载 section 没有落在主要 Flash 范围 `0x300000-0x33FFFF`。
-
-发现后应修正 RAM linker cmd / object set，而不是继续下载。
-
 ## Linker 找不到 RTS / `_c_int00`
 
 例如：

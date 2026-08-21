@@ -34,7 +34,7 @@ session.options.setString("VerifyAfterProgramLoad", "Full verification");
 session.memory.loadProgram(program);
 ```
 
-`AutoRunToLabelOnRestart=false` 可避免自定义 startup 在 load 后被自动 run-to-main。Flash programming 要给 erase/program/verify 足够 timeout；RAM-only 装载前必须先通过 map 证明可装载 section 都在 RAM。
+`AutoRunToLabelOnRestart=false` 可避免自定义 startup 在 load 后被自动 run-to-main。Flash programming 要给 erase/program/verify 足够 timeout，并确认加载的是本次默认 `Debug` 生成的 `.out`。
 
 受限环境无法写 TI AppData 时：
 
@@ -131,7 +131,7 @@ runAsynch → 等待 → halt → 读取 state/pass/error/progress → 判断终
 
 这种一致快照适合低频业务状态机，会短暂扰动目标；高实时性控制环应改用运行中实时访问、trace 或应用侧 sticky evidence。
 
-原状态机 run/halt 一致快照流程已在 CCS 7.2 + XDS100V3 + F28335 RAM-only 联调中验证。`startup_grace_samples` 和非数值 expression 防护是在此基础上增加的通用保护；下次在真实工程使用新版脚本时，应顺带确认日志中的 `STARTUP_GRACE`、`SAMPLE` 和最终 PASS/FAIL 行符合预期，再把该行为视为当前环境的已验证事实。
+状态机 run/halt 一致快照流程已在 CCS 7.2 + XDS100V3 + F28335 上验证。`startup_grace_samples` 和非数值 expression 防护用于避免启动默认值和无效表达式造成误判；使用时确认日志中的 `STARTUP_GRACE`、`SAMPLE` 和最终 PASS/FAIL 行符合预期。
 
 ## 交互式调试
 

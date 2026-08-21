@@ -23,17 +23,16 @@ DSS examples     ccs_base\scripting\examples
 DSS API docs     ccs_base\scripting\docs\DS_API
 ```
 
-不要自动选择 `tools\compiler` 中版本号最新的 compiler；读取当前工程的 `Debug\makefile` 和 `.cproject`。
+不要自动选择 `tools\compiler` 中版本号最新的 compiler；读取当前工程的 `.cproject` 和默认 `Debug` 构建日志。
 
 ## 已验证能力
 
 本机已在 CCS 7.2 + XDS100V3 + F28335 上验证：
 
-- 使用 generated makefile 构建正常 Flash 配置。
-- 保持 Flash 配置不变，复用最新 `.obj` 独立链接 RAM-only `.out`。
-- 通过 map 证明 `.text/.cinit/.econst/.ebss/.stack` 位于片内 RAM，且无 Flash 可装载段。
-- DSS 能下载 RAM 镜像、运行目标、读取变量和状态机一致快照。
-- RAM 验证结束后可恢复目标运行并断开 session；reset/掉电后 RAM 镜像消失。
+- 使用 CCS Managed Builder clean build 工程默认 `Debug` 配置。
+- DSS 能把默认 `.out` 烧录到 Flash、执行 Full verification、运行目标并读取变量。
+- 单调计数器验证可用于证明程序和目标业务链路持续运行。
+- 验证结束后可保持目标运行并断开 session。
 
 这证明工具链路径和流程在本机可用，不提供其他工程的固定 memory map、对象清单、入口点或变量名。
 
@@ -46,10 +45,13 @@ $env:TI_APPDATA_DIR = '<WRITABLE_DIR>\ti-appdata'
 New-Item -ItemType Directory -Force -Path $env:TI_APPDATA_DIR | Out-Null
 ```
 
-工程构建通常在实际 build 目录调用：
+工程构建使用 CCS Managed Builder，让 CCS 刷新资源并维护 generated makefile：
 
 ```powershell
-& 'D:\04-software\CCSv720\ccsv7\utils\bin\gmake.exe' -j4 all
+& 'D:\04-software\CCSv720\ccsv7\eclipse\eclipsec.exe' `
+  -noSplash -data '<DEDICATED_WORKSPACE>' `
+  -application org.eclipse.cdt.managedbuilder.core.headlessbuild `
+  -cleanBuild '<PROJECT_NAME>/Debug'
 ```
 
-具体 compiler flags、RAM linker、`.ccxml`、输出文件和验证表达式必须来自当前工程。
+具体工程名、compiler flags、linker、`.ccxml`、默认输出文件和验证表达式必须来自当前工程。
